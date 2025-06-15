@@ -1,0 +1,115 @@
+name: Build Squidify Wrapper
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  release:
+    types: [ published ]
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        build:
+          - name: 'Windows'
+            platform: 'windows/amd64'
+            os: 'windows-latest'
+          - name: 'macOS'
+            platform: 'darwin/universal'
+            os: 'macos-latest'
+          - name: 'Linux'
+            platform: 'linux/amd64'
+            os: 'ubuntu-latest'
+
+    runs-on: ${{ matrix.build.os }}
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: Build wails
+      uses: dAppServer/wails-build-action@v2.2
+      id: build
+      with:
+        build-name: squidify-${{ matrix.build.name }}
+        build-platform: ${{ matrix.build.platform }}
+        package: false
+        go-version: '1.21'
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: squidify-${{ matrix.build.name }}
+        path: |
+          */bin/
+          */build/
+        retention-days: 5
+
+  release:
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name == 'release'
+    steps:
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      
+    - name: Create release archives
+      run: |
+        # Create archives for each platform
+        cd squidify-Windows && zip -r ../squidify-windows.zip . && cd ..
+        cd squidify-macOS && tar -czf ../squidify-macos.tar.gz . && cd ..
+        cd squidify-Linux && tar -czf ../squidify-linux.tar.gz . && cd ..
+        
+    - name: Upload release assets
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          squidify-windows.zip
+          squidify-macos.tar.gz
+          squidify-linux.tar.gz
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Optional: Build and test on every commit
+  test:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Setup Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.21'
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+
+    - name: Install Wails
+      run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
+
+    - name: Install frontend dependencies
+      run: |
+        cd frontend
+        npm install
+
+    - name: Build frontend
+      run: |
+        cd frontend
+        npm run build
+
+    - name: Get Go dependencies
+      run: go mod download
+
+    - name: Test Go code
+      run: go test ./...
+
+    - name: Verify Wails project
+      run: wails doctor
