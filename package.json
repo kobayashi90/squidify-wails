@@ -1,0 +1,12 @@
+{
+  "name": "squidify-wrapper-frontend",
+  "version": "1.0.0",
+  "description": "Frontend for Squidify desktop wrapper",
+  "main": "index.html",
+  "scripts": {
+    "build": "mkdir -p dist && cp index.html dist/",
+    "dev": "echo 'Development server not needed for this wrapper'"
+  },
+  "devDependencies": {},
+  "dependencies": {}
+}
